@@ -69,14 +69,28 @@ class Cifar10VGG16:
         p_hat = new_model.evaluate_generator(self.test)[0]
         if not self.base_model_accuracy:
             print('Calculating the accuracy of the base line model')
-            self.base_model_accuracy = self.model.evaluate_generator(test)[0]
+            self.base_model_accuracy = self.model.evaluate_generator(self.test)[0]
         accuracy_term = (self.b - (self.base_model_accuracy - p_hat)) / self.b
         return accuracy_term
+    def get_least_filter(self):
+        flts = []
+        c = 0
+        for i in self.model.get_layer(self.layer_name)[0]:
+            flts.append([np.linalg.norm(i),c])
+            c+=1
+        flts.sort()
+        return [flts[0][1]]
+
 
     def step(self, action):
         action = np.where(action[0] == 0)[0]
-        new_model = delete_channels(self.model, layer=self.model.get_layer(self.layer_name), channels=action)
-        new_model.compile(loss="categorical_crrossentropy", optimizer='sgd', metrics=['accuracy'])
+        temp = None
+        if(len(actions)==0 || len(actions)==self.action_size):
+            temp = get_least_filter()
+        else:
+            temp = action
+        new_model = delete_channels(self.model, layer=self.model.get_layer(self.layer_name), channels=temp)
+        new_model.compile(loss="categorical_crossentropy", optimizer='sgd', metrics=['accuracy'])
         reward = self._accuracy_term(new_model) - math.log10(self.action_size / len(action))
         done, x = self.get()
         return action, reward, done, x

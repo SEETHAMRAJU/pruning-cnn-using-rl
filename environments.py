@@ -1,5 +1,6 @@
 from keras.applications import VGG16
 from keras.models import Model
+import keras
 from keras.layers import Dense, Flatten
 from keras.datasets import cifar100
 from keras import Input
@@ -23,6 +24,8 @@ class Cifar10VGG16:
 
     def __init__(self, b=0.5):
         (self.x_train, self.y_train), (self.x_test, self.y_test) = cifar100.load_data()
+        self.y_train = keras.utils.to_categorical(self.y_train)
+        self.y_test = keras.utils.to_categorical(self.y_test)
         self.model = self.__build_model()
         self.num_classes = 100
         self.b = b
@@ -36,22 +39,22 @@ class Cifar10VGG16:
         self.layer_name = None
         train_gen = ImageDataGenerator(featurewise_std_normalization=True, featurewise_center=True)
         test_gen = ImageDataGenerator(featurewise_std_normalization=True, featurewise_center=True)
-        train_gen.fit(x_train)
-        test_gen.fit(x_test)
-        self.train = train_gen.flow(x_train,y_train)
-        self.test = test_gen.flow(x_test, y_test)
+        train_gen.fit(self.x_train)
+        test_gen.fit(self.x_test)
+        self.train = train_gen.flow(self.x_train, self.y_train)
+        self.test = test_gen.flow(self.x_test, self.y_test)
 
 
     def __build_model(self):
         """Builds the VGG16 Model
         """
-        optim = SGD(learning_rate = 1e-4)
+        optm = SGD(learning_rate = 1e-4)
         model_obj = cifar100vgg.cifar100vgg(train=False)
         model = model_obj.getModel()
         model.compile(loss='sparse_categorical_crossentropy',optimizer=optm, metrics=['accuracy'])
         return model
 
-    def get(self, layer_name='block5_conv1'):
+    def get(self, layer_name='conv2d_1'):
         self.layer_name = layer_name
         x = self.model.get_layer(layer_name).get_weights()[0]
         self.state_size, self.action_size = x.shape[:3], x.shape[-1]
@@ -62,17 +65,8 @@ class Cifar10VGG16:
         return False, x
 
     def _accuracy_term(self, new_model):
-        # train_data_generator = data_generator(self.x_train, self.y_train, self.num_classes)
-        # eval_data_generator = data_generator(self.x_test, self.y_test, self.num_classes)
-        # train_steps = train_data_generator.n // train_data_generator.batch_size
-        # validation_steps = eval_data_generator.n // eval_data_generator.batch_size
-
-        # new_model.fit_generator(generator=train_data_generator, steps_per_epoch=train_steps, epochs=self.epochs,
-                                # validation_data=eval_data_generator, validation_steps=validation_steps)
-        new_model.fit_generator(train, epochs=self.epochs, validation_data = test)
-
-        # p_hat = new_model.evaluate_generator(eval_data_generator, eval_data_generator.n, verbose=1)[0]
-        p_hat = new_model.evaluate_generator(test)[0]
+        new_model.fit_generator(self.train, epochs=self.epochs)
+        p_hat = new_model.evaluate_generator(self.test)[0]
         if not self.base_model_accuracy:
             print('Calculating the accuracy of the base line model')
             self.base_model_accuracy = self.model.evaluate_generator(test)[0]
@@ -82,7 +76,7 @@ class Cifar10VGG16:
     def step(self, action):
         action = np.where(action[0] == 0)[0]
         new_model = delete_channels(self.model, layer=self.model.get_layer(self.layer_name), channels=action)
-        new_model.compile(loss="binary_crossentropy", optimizer=Adam(lr=0.01), metrics=['accuracy'])
+        new_model.compile(loss="categorical_crrossentropy", optimizer='sgd', metrics=['accuracy'])
         reward = self._accuracy_term(new_model) - math.log10(self.action_size / len(action))
         done, x = self.get()
         return action, reward, done, x

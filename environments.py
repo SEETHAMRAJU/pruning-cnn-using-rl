@@ -85,7 +85,7 @@ class Cifar10VGG16:
     def step(self, action):
         action = np.where(action[0] == 0)[0]
         temp = None
-        if(len(actions)==0 || len(actions)==self.action_size):
+        if(len(action)==0 and len(action)==self.action_size):
             temp = get_least_filter()
         else:
             temp = action
